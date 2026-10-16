@@ -4,6 +4,7 @@ export interface VaultFile {
   extension: string;
   is_dir: boolean;
   parent: string;
+  mtime?: number;
 }
 
 export interface FileNode {

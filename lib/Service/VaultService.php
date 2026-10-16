@@ -78,6 +78,8 @@ class VaultService {
                 'extension' => $ext,
                 'is_dir'    => $isDir,
                 'parent'    => $currentPath,
+                // Lets the client re-read only files that changed since the last poll.
+                'mtime'     => $node->getMTime(),
             ];
 
             if ($isDir) {

@@ -60,13 +60,38 @@ export const useVaultStore = create<VaultState>()((set, get) => ({
     await get().openVault(path);
   },
 
-  refreshFiles: async () => {
-    const { vaultPath } = get();
-    if (!vaultPath) return;
-    const files = await listFiles(vaultPath);
-    set({ files });
-    await indexAll(files);
-    // Reload color config if colors.md exists in the refreshed file list
-    await useColorStore.getState().loadFromVault(vaultPath, files);
+  // One refresh runs at a time, so slow responses can't stack up overlapping refreshes.
+  // A request made meanwhile (e.g. after creating a note) queues one rerun.
+  refreshFiles: () => {
+    if (refreshRunning) {
+      refreshQueued = true;
+      return refreshRunning;
+    }
+    refreshRunning = (async () => {
+      try {
+        do {
+          refreshQueued = false;
+          const { vaultPath } = get();
+          if (!vaultPath) return;
+          const listed = await listFiles(vaultPath);
+          // Only replace the list when something changed: a new array re-lays-out the graph.
+          if (filesSignature(listed) !== filesSignature(get().files)) set({ files: listed });
+          const { files } = get();
+          await indexAll(files, true);
+          // Reload color config if colors.md exists in the refreshed file list
+          await useColorStore.getState().loadFromVault(vaultPath, files);
+        } while (refreshQueued);
+      } finally {
+        refreshRunning = null;
+      }
+    })();
+    return refreshRunning;
   },
 }));
+
+let refreshRunning: Promise<void> | null = null;
+let refreshQueued = false;
+
+function filesSignature(files: VaultFile[]): string {
+  return files.map((f) => `${f.path}|${f.is_dir ? 1 : 0}|${f.mtime ?? ""}`).join("\n");
+}

@@ -61,13 +61,21 @@ export const useColorStore = create<ColorState>()((set) => ({
     // Avoids 404 console noise for optional config files that haven't been created yet.
     for (const candidate of COLORS_PATHS) {
       const fullPath = `${vaultPath}/${candidate}`;
-      if (!files.some((f) => f.path === fullPath)) continue;
+      const file = files.find((f) => f.path === fullPath);
+      if (!file) continue;
+      // Skip the read, and the graph re-layout a new emojiMap triggers, when the
+      // colours file hasn't changed since it was last loaded.
+      const key = `${fullPath}|${file.mtime ?? ""}`;
+      if (file.mtime !== undefined && key === loadedColorsKey) return;
       try {
         const content = await readFile(fullPath);
         const parsed = parseColorsFile(content);
         set({ emojiMap: buildEmojiMap(parsed) });
+        loadedColorsKey = key;
         return;
       } catch { /* skip unreadable file */ }
     }
   },
 }));
+
+let loadedColorsKey: string | null = null;
